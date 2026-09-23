@@ -1,0 +1,23 @@
+{
+  "name": "qr-connector-gms",
+  "version": "0.1.0",
+  "description": "USB HID QR/barcode scanner connector for the GMS lane hardware stack — publishes decoded scans to lane.{N}.qrcode over NATS.",
+  "main": "index.js",
+  "bin": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build-windows": "pkg . --targets node18-win-x64 --output dist/windows/qr-connector.exe"
+  },
+  "dependencies": {
+    "node-hid": "^3.1.0",
+    "nats": "^2.28.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.16.1"
+  },
+  "pkg": {
+    "assets": ["node_modules/node-hid/prebuilds/**/*.node"],
+    "targets": ["node18-win-x64"]
+  }
+}
