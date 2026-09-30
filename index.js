@@ -21,7 +21,28 @@ const LANE_NUMBER = process.env.LANE_NUMBER || '1';
 // find your actual scanner's IDs with `lsusb` (see README).
 const SCANNER_VENDOR_ID = parseInt(process.env.SCANNER_VENDOR_ID || '0x05e0', 16);
 const SCANNER_PRODUCT_ID = parseInt(process.env.SCANNER_PRODUCT_ID || '0x1200', 16);
+// Only needed when two scanners of the same make/model are plugged into one box (e.g.
+// a 2-lane LaneController) — vendorId/productId can't tell them apart, but node-hid's
+// own device `path` is unique per physical device. Leave unset for the common
+// single-scanner case. Find a device's path with --list-devices.
+const SCANNER_DEVICE_PATH = process.env.SCANNER_DEVICE_PATH || null;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+
+// `qr-connector.exe --list-devices` — there's no Windows equivalent of `lsusb` that
+// shows node-hid's own path format, so this is the practical way to find the right
+// SCANNER_DEVICE_PATH value when a box has two identical scanners installed.
+if (process.argv.includes('--list-devices')) {
+  const HID = require('node-hid');
+  for (const d of HID.devices()) {
+    console.log(
+      `vendorId=0x${d.vendorId.toString(16).padStart(4, '0')} ` +
+        `productId=0x${d.productId.toString(16).padStart(4, '0')} ` +
+        `product=${JSON.stringify(d.product || '')} ` +
+        `path=${d.path}`,
+    );
+  }
+  process.exit(0);
+}
 
 async function main() {
   const publisher = new NatsPublisher({ natsUrl: NATS_URL, laneNumber: LANE_NUMBER });
@@ -31,7 +52,11 @@ async function main() {
   const scanner =
     SCANNER_MODE === 'stdin'
       ? new StdinScanner()
-      : new HidScanner({ vendorId: SCANNER_VENDOR_ID, productId: SCANNER_PRODUCT_ID });
+      : new HidScanner({
+          vendorId: SCANNER_VENDOR_ID,
+          productId: SCANNER_PRODUCT_ID,
+          devicePath: SCANNER_DEVICE_PATH,
+        });
 
   scanner.on('scan', async (token) => {
     try {

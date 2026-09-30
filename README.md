@@ -34,6 +34,23 @@ set `SCANNER_VENDOR_ID`/`SCANNER_PRODUCT_ID` in `.env` accordingly.
 Point `NATS_URL` at wherever GMS's `nats` service is reachable from this host — the
 project's own `docker-compose.yml` publishes it to `localhost:4222` by default.
 
+### Two identical scanners on one box (e.g. a 2-lane LaneController)
+
+`SCANNER_VENDOR_ID`/`SCANNER_PRODUCT_ID` can't tell apart two scanners of the same
+make/model — both report identical values. If this machine runs two `qr-connector`
+instances (one per lane) with the same scanner model, find each device's unique path
+instead:
+
+```
+qr-connector.exe --list-devices
+# (or: node index.js --list-devices, if running from source)
+```
+
+This prints every HID device currently attached, including its `path`. Set
+`SCANNER_DEVICE_PATH` in each instance's own `.env` to the path of the scanner
+physically wired to that lane — this takes priority over `SCANNER_VENDOR_ID`/
+`SCANNER_PRODUCT_ID` when set. Leave it unset for the common single-scanner case.
+
 ## Running
 
 Against the real scanner:

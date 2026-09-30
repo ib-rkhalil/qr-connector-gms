@@ -63,10 +63,16 @@ const HID_TO_ASCII = {
 // fallback for a scanner configured without one, so a read still surfaces instead
 // of sitting in currentString forever.
 class HidScanner extends EventEmitter {
-  constructor({ vendorId, productId, flushDebounceMs = 50 }) {
+  // devicePath (node-hid's own `path` field, e.g. a Windows HID instance path) is
+  // required to tell apart two scanners of the *same* make/model on one machine —
+  // vendorId/productId alone can't, since both devices report identical values there.
+  // Optional: most sites have exactly one scanner per box, where vendorId/productId
+  // is unambiguous and simpler to configure.
+  constructor({ vendorId, productId, devicePath = null, flushDebounceMs = 50 }) {
     super();
     this.vendorId = vendorId;
     this.productId = productId;
+    this.devicePath = devicePath;
     this.flushDebounceMs = flushDebounceMs;
     this.device = null;
     this.currentString = '';
@@ -76,17 +82,42 @@ class HidScanner extends EventEmitter {
 
   start() {
     const devices = HID.devices();
-    const scannerInfo = devices.find(
+
+    if (this.devicePath) {
+      const scannerInfo = devices.find((d) => d.path === this.devicePath);
+      if (!scannerInfo) {
+        throw new Error(
+          `Scanner not found at device path "${this.devicePath}". It may have been ` +
+            'unplugged, or moved to a different USB port (some platforms tie the path ' +
+            'to the physical port) -- run with --list-devices to see current paths.',
+        );
+      }
+      this.device = new HID.HID(scannerInfo.path);
+      this.device.on('data', (buffer) => this._handleReport(buffer));
+      this.device.on('error', (err) => this.emit('error', err));
+      return;
+    }
+
+    const matches = devices.filter(
       (d) => d.vendorId === this.vendorId && d.productId === this.productId,
     );
-    if (!scannerInfo) {
+    if (matches.length === 0) {
       throw new Error(
         `Scanner not found (vendorId=0x${this.vendorId.toString(16)}, productId=0x${this.productId.toString(16)}). ` +
           'Check the USB connection, or that SCANNER_VENDOR_ID/SCANNER_PRODUCT_ID match your device (see README, "lsusb").',
       );
     }
+    if (matches.length > 1) {
+      console.warn(
+        `Warning: ${matches.length} HID devices match vendorId=0x${this.vendorId.toString(16)}/` +
+          `productId=0x${this.productId.toString(16)} -- picking the first one found. If this ` +
+          'machine has two identical scanners (e.g. one per lane), set SCANNER_DEVICE_PATH ' +
+          'instead so each connector instance binds to its own physical device (run with ' +
+          '--list-devices to find each one\'s path).',
+      );
+    }
 
-    this.device = new HID.HID(scannerInfo.path);
+    this.device = new HID.HID(matches[0].path);
     this.device.on('data', (buffer) => this._handleReport(buffer));
     this.device.on('error', (err) => this.emit('error', err));
   }
